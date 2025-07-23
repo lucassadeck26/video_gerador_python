@@ -2,23 +2,30 @@
 {% block content %}
     <h1>Etapa 2: Gerar Roteiro com IA</h1>
 
-    {% if status.roteiro %}
+    {% if status.roteiro_partes %}
         <div class="status completo">
-            <p><strong>Um roteiro já existe:</strong> {{ status.roteiro }}</p>
-            <a href="{{ url_for('etapa3_narracao') }}">Continuar para a Etapa 3 &rarr;</a>
-            <form action="{{ url_for('excluir', etapa='roteiro') }}" method="post" style="display: inline-block; margin-left: 10px;">
+            <p><strong>Roteiro gerado e dividido em {{ status.roteiro_partes|length }} partes com sucesso!</strong></p>
+            <p>Agora você pode descarregar o roteiro completo ou avançar para a próxima etapa para gerar os áudios individuais.</p>
+            <br>
+            <a href="{{ url_for('download_roteiro') }}" style="padding: 10px; background-color: #17a2b8; color: white; text-decoration: none;">
+                Descarregar Roteiro Completo (.txt)
+            </a>
+            <a href="{{ url_for('etapa3_narracao') }}" style="padding: 10px; background-color: green; color: white; text-decoration: none; margin-left: 10px;">
+                Continuar para a Etapa 3 (Gerar Áudios) &rarr;
+            </a>
+            <form action="{{ url_for('excluir', etapa='roteiro') }}" method="post" style="display: inline-block; margin-left: 20px;">
                  <input type="hidden" name="action" value="delete_all">
-                <button type="submit" onclick="return confirm('Isso irá apagar o roteiro. Deseja recomeçar?')">Excluir e Recomeçar</button>
+                <button type="submit" onclick="return confirm('Isso irá apagar o roteiro completo e todas as suas partes. Deseja recomeçar?')">Excluir e Recomeçar</button>
             </form>
         </div>
     {% else %}
         <div class="status pendente">
-            <p>A transcrição para o tema <strong>"{{ status.tema_novela }}"</strong> está pronta para ser transformada em um roteiro.</p>
-            <p>Clique no botão abaixo para que a IA da Gemini crie uma narração cativante baseada neste texto.</p>
+            <p>A transcrição para o tema <strong>"{{ status.tema_novela or 'Tema não definido' }}"</strong> está pronta para ser transformada num roteiro.</p>
+            <p>Clique no botão abaixo para que a IA da Gemini crie uma narração cativante e a divida em partes.</p>
             <br>
             <form method="post">
                 <button type="submit" style="padding: 15px; font-size: 16px;">
-                    ✨ Gerar Roteiro com IA
+                    ✨ Gerar e Dividir Roteiro com IA
                 </button>
             </form>
         </div>

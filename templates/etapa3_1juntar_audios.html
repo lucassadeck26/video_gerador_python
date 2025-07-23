@@ -1,0 +1,32 @@
+{% extends "layout.html" %}
+{% block content %}
+    <h1>Etapa 3.1: Gerir e Juntar Áudios</h1>
+    
+    <div class="status pendente">
+        <h3>Partes de Áudio ({{ status.narracao_partes|length }})</h3>
+        <p>Ouça cada parte, selecione as que deseja manter e clique em "Juntar Áudios" para criar a narração final.</p>
+        
+        <form method="post">
+            <!-- Lista de áudios com players e checkboxes -->
+            <div style="max-height: 400px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px;">
+            {% for audio in status.narracao_partes %}
+                <div style="margin-bottom: 10px; display: flex; align-items: center;">
+                    <label>
+                        <input type="checkbox" name="audios_selecionados" value="{{ audio }}" checked> 
+                        <strong>{{ audio }}</strong>
+                    </label>
+                    <audio controls preload="none" style="vertical-align: middle; margin-left: 10px; width: 300px;">
+                        <source src="{{ url_for('serve_data_file', filepath='narracao_partes/' + audio) }}" type="audio/mpeg">
+                    </audio>
+                </div>
+            {% endfor %}
+            </div>
+
+            <!-- PARTE QUE ESTAVA EM FALTA -->
+            <button type="submit" style="padding: 15px; font-size: 16px;">
+                🔗 Juntar Áudios Selecionados
+            </button>
+        </form>
+        <!-- FIM DA PARTE QUE ESTAVA EM FALTA -->
+    </div>
+{% endblock %}

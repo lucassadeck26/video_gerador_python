@@ -93,16 +93,34 @@ def etapa3_narracao():
             return redirect(url_for('etapa3_narracao'))
 
         print(f"Iniciando a geração da narração com a voz {voice_selection}...")
-        sucesso, mensagem = helpers.gerar_narracao(voice_selection)
+        sucesso, mensagem = helpers.gerar_narracao_por_partes(voice_selection)
         flash(mensagem)
         if sucesso:
-            return redirect(url_for('etapa4_videos_base'))
+            return redirect(url_for('etapa3_1juntar_audios'))
         else:
             return redirect(url_for('etapa3_narracao'))
 
     # Para a requisição GET, busca a lista de vozes para mostrar no formulário
     vozes = helpers.listar_vozes()
     return render_template('etapa3_narracao.html', status=status, vozes=vozes)
+
+
+
+# NOVA ROTA PARA A ETAPA 3.1
+@app.route('/etapa3_1', methods=['GET', 'POST'])
+def etapa3_1_juntar_audios():
+    status = helpers.verificar_status()
+    if not status['narracao_partes']:
+        flash("Você precisa concluir a Etapa 3 (Gerar Áudios) primeiro!")
+        return redirect(url_for('etapa3_narracao'))
+    if request.method == 'POST':
+        audios_selecionados = request.form.getlist('audios_selecionados')
+        sucesso, mensagem = helpers.juntar_audios(audios_selecionados)
+        flash(mensagem)
+        if sucesso:
+            return redirect(url_for('etapa4_videos_base'))
+    # CORREÇÃO DO NOME DO FICHEIRO AQUI
+    return render_template('etapa3_1juntar_audios.html', status=status)
 
 
 # --- ETAPA 4 ---
@@ -187,6 +205,22 @@ def serve_image(filename):
 def serve_final_video(filename):
     return send_from_directory('video_final', filename)
 
+
+# NOVA ROTA PARA DOWNLOAD DO ROTEIRO
+@app.route('/download_roteiro')
+def download_roteiro():
+    status = helpers.verificar_status()
+    if status['roteiro']:
+        return send_from_directory(helpers.PASTA_ROTEIRO, status['roteiro'], as_attachment=True)
+    return redirect(url_for('index'))
+
+
+
+# ROTA GENÉRICA QUE ESTAVA EM FALTA
+@app.route('/data/<path:filepath>')
+def serve_data_file(filepath):
+    """Serve ficheiros de todas as pastas de dados (imagens, narracao_partes, etc.)."""
+    return send_from_directory('.', filepath)
 
 
 

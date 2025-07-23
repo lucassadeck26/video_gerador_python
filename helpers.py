@@ -1,5 +1,6 @@
 # helpers.py
 import os
+import textwrap
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 import google.generativeai as genai
 from google.cloud import texttospeech
@@ -19,6 +20,9 @@ PASTA_VIDEO_SEM_TRILHA = "video_sem_trilha"
 PASTA_VIDEOS_BASE = "videos"
 PASTA_VIDEO_FINAL = "video_final"
 PASTA_TEMA = "tema"
+PASTA_ROTEIRO_PARTES = "roteiro_partes"
+PASTA_NARRACAO_PARTES = "narracao_partes"
+
 
 def verificar_status():
     """Verifica a existência de ficheiros em cada pasta para determinar o estado do projeto."""
@@ -26,8 +30,11 @@ def verificar_status():
         'transcricao': None, 'roteiro': None, 'narracao': None,
         'imagens': [], 'videos_base': [], 
         'video_sem_trilha': None, 'trilha_sonora': [], 'video_final': None,
-        'tema_novela': None # Novo estado para o nome da novela
+        'tema_novela': None,
+        'roteiro_partes': [], # NOVO ESTADO
+        'narracao_partes': [] # NOVO ESTADO
     }
+    
     
     # Verifica transcrição
     if os.path.exists(PASTA_TRANSCRICAO) and os.listdir(PASTA_TRANSCRICAO):
@@ -73,6 +80,17 @@ def verificar_status():
         arquivos_mp4 = [f for f in os.listdir(PASTA_VIDEO_FINAL) if f.endswith('.mp4')]
         if arquivos_mp4:
             status['video_final'] = arquivos_mp4[0]
+
+    if os.path.exists(PASTA_NARRACAO_PARTES):
+        status['narracao_partes'] = sorted([f for f in os.listdir(PASTA_NARRACAO_PARTES) if f.endswith('.mp3')])
+    if os.path.exists(PASTA_TEMA) and os.path.exists(os.path.join(PASTA_TEMA, 'tema.txt')):
+        with open(os.path.join(PASTA_TEMA, 'tema.txt'), 'r', encoding='utf-8') as f:
+            status['tema_novela'] = f.read().strip()        
+    if os.path.exists(PASTA_ROTEIRO_PARTES):
+        status['roteiro_partes'] = sorted([f for f in os.listdir(PASTA_ROTEIRO_PARTES) if f.endswith('.txt')])
+    if os.path.exists(PASTA_NARRACAO) and any(f.endswith('.mp3') for f in os.listdir(PASTA_NARRACAO)):
+        status['narracao'] = os.listdir(PASTA_NARRACAO)[0]
+
 
     # --- DIAGNÓSTICO DA PASTA DE TEMA ---
     print("\n--- DIAGNÓSTICO DA PASTA DE TEMA ---")
@@ -121,37 +139,36 @@ def gerar_transcricao(nome_novela, conteudo_transcricao):
 
 
 # VERSÃO ATUALIZADA DA FUNÇÃO DE EXCLUSÃO
-def excluir_arquivo(etapa, arquivos_especificos=None):
-    """Exclui arquivos de uma determinada etapa. Pode excluir tudo ou arquivos específicos."""
-    pastas = {
-        'transcricao': PASTA_TRANSCRICAO,
-        'roteiro': PASTA_ROTEIRO,
-        'narracao': PASTA_NARRACAO,
-        'imagens': PASTA_IMAGENS,
-        'videos_base': PASTA_VIDEOS_BASE,
-        'video_final': PASTA_VIDEO_FINAL # ADICIONADA A REFERÊNCIA QUE FALTAVA
-    }
-    pasta_alvo = pastas.get(etapa)
-    if not (pasta_alvo and os.path.exists(pasta_alvo)):
-        return False
 
-    if arquivos_especificos:
-        for nome_arquivo in arquivos_especificos:
-            caminho_arquivo = os.path.join(pasta_alvo, nome_arquivo)
-            if os.path.exists(caminho_arquivo):
-                os.remove(caminho_arquivo)
-        print(f"{len(arquivos_especificos)} arquivo(s) excluído(s) de '{pasta_alvo}'.")
-    else:
-        for f in os.listdir(pasta_alvo):
-            os.remove(os.path.join(pasta_alvo, f))
-        print(f"Todos os arquivos em '{pasta_alvo}' foram excluídos.")
+def excluir_arquivo(etapa, arquivos_especificos=None):
+    """Exclui ficheiros de uma determinada etapa."""
+    pastas = {
+        'transcricao': [PASTA_TRANSCRICAO, PASTA_TEMA],
+        'roteiro': [PASTA_ROTEIRO, PASTA_ROTEIRO_PARTES],
+        'narracao': [PASTA_NARRACAO, PASTA_NARRACAO_PARTES],
+        'imagens': [PASTA_IMAGENS],
+        'videos_base': [PASTA_VIDEOS_BASE],
+        'video_sem_trilha': [PASTA_VIDEO_SEM_TRILHA],
+        'trilha_sonora': [PASTA_TRILHA_SONORA],
+        'video_final': [PASTA_VIDEO_FINAL]
+    }
+    pastas_alvo = pastas.get(etapa, [])
+    for pasta in pastas_alvo:
+        if os.path.exists(pasta):
+            arquivos_a_excluir = arquivos_especificos if arquivos_especificos else os.listdir(pasta)
+            for nome_ficheiro in arquivos_a_excluir:
+                caminho_ficheiro = os.path.join(pasta, nome_ficheiro)
+                if os.path.exists(caminho_ficheiro):
+                    os.remove(caminho_ficheiro)
     return True
 
-# Aqui adicionaremos as outras funções (gerar_roteiro, gerar_narracao) depois.
 
-# NOVA FUNÇÃO PARA A ETAPA 2
+
+
+# ETAPA 2.0-----------------------------------------
+
 def gerar_roteiro():
-    """Lê a transcrição e o nome da novela, envia para a Gemini e salva o roteiro."""
+    """Lê a transcrição, gera o roteiro com a IA, salva o ficheiro completo E o divide em partes."""
     try:
         status = verificar_status()
         if not status['transcricao'] or not status['tema_novela']:
@@ -185,22 +202,31 @@ def gerar_roteiro():
         roteiro_gerado = response.text
         print("Roteiro recebido da IA.")
 
+        # 1. Salva o roteiro completo para download
         os.makedirs(PASTA_ROTEIRO, exist_ok=True)
-        excluir_arquivo('roteiro')
-        nome_arquivo_roteiro = f"roteiro_{nome_novela.replace(' ', '_').replace(',', '')}.txt"
-        with open(os.path.join(PASTA_ROTEIRO, nome_arquivo_roteiro), "w", encoding="utf-8") as f:
+        excluir_arquivo('roteiro') # Limpa a pasta do roteiro completo e das partes
+        nome_arquivo_completo = f"roteiro_completo_{nome_novela.replace(' ', '_')}.txt"
+        with open(os.path.join(PASTA_ROTEIRO, nome_arquivo_completo), "w", encoding="utf-8") as f:
             f.write(roteiro_gerado)
-            
-        return True, f"Roteiro '{nome_arquivo_roteiro}' criado com sucesso!"
+
+        # 2. Divide o roteiro em partes de 500 caracteres
+        os.makedirs(PASTA_ROTEIRO_PARTES, exist_ok=True)
+        partes = textwrap.wrap(roteiro_gerado, 500, break_long_words=True, break_on_hyphens=False)
+        
+        for i, parte in enumerate(partes):
+            nome_parte = f"parte_{i+1:03d}.txt" # ex: parte_001.txt
+            with open(os.path.join(PASTA_ROTEIRO_PARTES, nome_parte), "w", encoding="utf-8") as f:
+                f.write(parte)
+
+        return True, f"Roteiro completo e {len(partes)} partes foram criados com sucesso!"
 
     except Exception as e:
-        print(f"Ocorreu um erro inesperado ao gerar o roteiro: {e}")
-        return False, f"Ocorreu um erro inesperado: {e}"
+        return False, f"Ocorreu um erro ao gerar o roteiro: {e}"
+
+
+
 
 # ... ETAPA 3...
-
-
-
 def listar_vozes():
     """Lista as vozes disponíveis em Português (BR) e Espanhol."""
     try:
@@ -239,57 +265,70 @@ def listar_vozes():
         return {'pt-BR': [], 'es': []}
 
 
-# FUNÇÃO DE GERAR NARRAÇÃO ATUALIZADA
-def gerar_narracao(voice_name):
-    """
-    Lê o roteiro, envia para a API com a voz selecionada e salva o áudio.
-    """
+
+
+# ETAPA 3.0----------------------------------
+def gerar_narracao_por_partes(voice_name):
+    """Gera um ficheiro de áudio para CADA parte do roteiro."""
     try:
         status = verificar_status()
-        if not status['roteiro']:
-            return False, "ERRO: Nenhum roteiro encontrado para gerar a narração."
-        
-        caminho_roteiro = os.path.join(PASTA_ROTEIRO, status['roteiro'])
-        with open(caminho_roteiro, "r", encoding="utf-8") as f:
-            texto_para_narrar = f.read()
+        if not status['roteiro_partes']:
+            return False, "ERRO: Nenhuma parte do roteiro encontrada para gerar os áudios."
 
-        print(f"Gerando áudio com a voz: {voice_name}...")
+        os.makedirs(PASTA_NARRACAO_PARTES, exist_ok=True)
+        excluir_arquivo('narracao') # Apaga narração final e partes antigas
+        
         client = texttospeech.TextToSpeechClient()
-        synthesis_input = texttospeech.SynthesisInput(text=texto_para_narrar)
-        
-        # Extrai o código do idioma do nome da voz (ex: "pt-BR" de "pt-BR-Wavenet-B")
         language_code = '-'.join(voice_name.split('-')[:2])
-
-        voice = texttospeech.VoiceSelectionParams(
-            language_code=language_code, name=voice_name
-        )
+        voice = texttospeech.VoiceSelectionParams(language_code=language_code, name=voice_name)
+        audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
         
-        audio_config = texttospeech.AudioConfig(
-            audio_encoding=texttospeech.AudioEncoding.MP3
-        )
-        response = client.synthesize_speech(
-            input=synthesis_input, voice=voice, audio_config=audio_config
-        )
+        audios_gerados = 0
+        for nome_roteiro_parte in status['roteiro_partes']:
+            caminho_roteiro = os.path.join(PASTA_ROTEIRO_PARTES, nome_roteiro_parte)
+            with open(caminho_roteiro, "r", encoding="utf-8") as f:
+                texto_para_narrar = f.read()
 
-        os.makedirs(PASTA_NARRACAO, exist_ok=True)
-        excluir_arquivo('narracao')
+            synthesis_input = texttospeech.SynthesisInput(text=texto_para_narrar)
+            response = client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
             
-        nome_base_arquivo, _ = os.path.splitext(status['roteiro'])
-        nome_audio = f"{nome_base_arquivo.replace('roteiro_', 'narracao_')}.mp3"
-        caminho_saida_audio = os.path.join(PASTA_NARRACAO, nome_audio)
+            nome_base, _ = os.path.splitext(nome_roteiro_parte)
+            nome_audio = f"{nome_base}.mp3"
+            caminho_saida_audio = os.path.join(PASTA_NARRACAO_PARTES, nome_audio)
+            with open(caminho_saida_audio, "wb") as out:
+                out.write(response.audio_content)
+            audios_gerados += 1
 
-        with open(caminho_saida_audio, "wb") as out:
-            out.write(response.audio_content)
-
-        return True, f"Narração '{nome_audio}' criada com sucesso!"
+        return True, f"{audios_gerados} partes de áudio foram geradas com sucesso!"
     except Exception as e:
-        print(f"Ocorreu um erro ao gerar o áudio: {e}")
-        return False, f"Ocorreu um erro ao gerar o áudio: {e}"
+        return False, f"Ocorreu um erro ao gerar os áudios: {e}"
 
+
+
+# ETAPA 3.1----------------------------------
+def juntar_audios(nomes_audios_selecionados):
+    """Junta os ficheiros de áudio selecionados numa única narração final."""
+    if not nomes_audios_selecionados:
+        return False, "ERRO: Nenhum áudio foi selecionado para ser juntado."
     
+    try:
+        nomes_audios_ordenados = sorted(nomes_audios_selecionados)
+        clips_de_audio = [mp.AudioFileClip(os.path.join(PASTA_NARRACAO_PARTES, nome)) for nome in nomes_audios_ordenados]
+        
+        narracao_final = mp.concatenate_audioclips(clips_de_audio)
+        
+        os.makedirs(PASTA_NARRACAO, exist_ok=True)
+        excluir_arquivo('narracao') # Apaga a narração final antiga, mas não as partes
+        caminho_saida = os.path.join(PASTA_NARRACAO, "narracao_final.mp3")
+        narracao_final.write_audiofile(caminho_saida)
+        
+        return True, "Narração final montada com sucesso!"
+    except Exception as e:
+        return False, f"Ocorreu um erro ao juntar os áudios: {e}"
+
+
 
 # --- ETAPA 4  COMEÇA AQUI---
-
 def salvar_imagens_upload(arquivos):
     """Salva os arquivos de imagem enviados pelo formulário."""
     os.makedirs(PASTA_IMAGENS, exist_ok=True)
