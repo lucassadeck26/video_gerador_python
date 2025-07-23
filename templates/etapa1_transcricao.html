@@ -1,0 +1,34 @@
+{% extends "layout.html" %}
+{% block content %}
+    <h1>Etapa 1: Definir Tema e Transcrição</h1>
+
+    {% if status.transcricao and status.tema_novela %}
+        <div class="status completo">
+            <p><strong>Dados iniciais já definidos:</strong></p>
+            <ul>
+                <li><strong>Tema:</strong> {{ status.tema_novela }}</li>
+                <li><strong>Ficheiro de Transcrição:</strong> {{ status.transcricao }}</li>
+            </ul>
+            <a href="{{ url_for('etapa2_roteiro') }}">Continuar para a Etapa 2 &rarr;</a>
+            <form action="{{ url_for('excluir', etapa='transcricao') }}" method="post" style="display: inline-block; margin-left: 10px;">
+                 <input type="hidden" name="action" value="delete_all">
+                <button type="submit" onclick="return confirm('Isso irá apagar a transcrição e o tema. Deseja recomeçar?')">Excluir e Recomeçar</button>
+            </form>
+        </div>
+    {% else %}
+        <div class="status pendente">
+            <p>Comece por definir o tema e colar a transcrição do vídeo.</p>
+            <form method="post">
+                <div style="margin-bottom: 1em;">
+                    <label for="nome_novela">Nome da Novela/Tema:</label><br>
+                    <input type="text" id="nome_novela" name="nome_novela" size="50" required>
+                </div>
+                <div style="margin-bottom: 1em;">
+                    <label for="conteudo_transcricao">Cole a Transcrição Aqui:</label><br>
+                    <textarea id="conteudo_transcricao" name="conteudo_transcricao" rows="15" cols="80" required></textarea>
+                </div>
+                <button type="submit">Salvar e Continuar</button>
+            </form>
+        </div>
+    {% endif %}
+{% endblock %}

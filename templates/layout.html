@@ -1,0 +1,38 @@
+<!-- templates/layout.html -->
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Gerador de Vídeo Automático</title>
+    <style>
+        body { font-family: sans-serif; margin: 2em; }
+        nav { margin-bottom: 2em; }
+        .status { margin-top: 1em; padding: 1em; border: 1px solid #ccc; border-radius: 5px; }
+        .completo { background-color: #d4edda; }
+        .pendente { background-color: #fff3cd; }
+        .flash { padding: 1em; margin-bottom: 1em; border: 1px solid; border-radius: 5px; }
+        .flash.success { background-color: #d4edda; }
+        .flash.error { background-color: #f8d7da; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/">Painel de Controle</a> |
+        <a href="/etapa1">Etapa 1: Transcrição</a> |
+        <a href="/etapa2">Etapa 2: Roteiro</a> |
+        <a href="/etapa3">Etapa 3: Narração</a>
+         <a href="/etapa4">Etapa 4: Vídeos Base</a>
+           <a href="/etapa5">Etapa 5: Montagem Final</a>
+            <a href="/etapa6">Etapa 6: Pós Vídeo</a>
+    </nav>
+    <hr>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        {% for message in messages %}
+          <div class="flash">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,40 @@
+{% extends "layout.html" %}
+{% block content %}
+    <h1>Etapa 3: Gerar Narração com IA</h1>
+
+    {% if status.narracao %}
+        <div class="status completo">
+            <p><strong>Uma narração em áudio já existe:</strong> {{ status.narracao }}</p>
+            <a href="{{ url_for('etapa4_videos_base') }}">Continuar para a Etapa 4 &rarr;</a>
+            <form action="{{ url_for('excluir', etapa='narracao') }}" method="post" style="display: inline-block; margin-left: 20px;">
+                <input type="hidden" name="action" value="delete_all">
+                <button type="submit" onclick="return confirm('Isso excluirá a narração. Deseja recomeçar?')">Excluir e Recomeçar</button>
+            </form>
+        </div>
+    {% else %}
+        <div class="status pendente">
+            <p>O roteiro <strong>'{{ status.roteiro }}'</strong> está pronto para ser transformado em áudio.</p>
+            <p>Selecione a voz desejada e clique no botão para gerar a narração.</p>
+            <br>
+            <form action="{{ url_for('etapa3_narracao') }}" method="post">
+                <label for="voice_selection">Escolha uma voz:</label>
+                <select name="voice_selection" id="voice_selection" required style="margin-left: 10px; padding: 5px;">
+                    <optgroup label="Português (Brasil)">
+                        {% for voz in vozes['pt-BR'] %}
+                            <option value="{{ voz.name }}">{{ voz.name }} ({{ voz.gender }})</option>
+                        {% endfor %}
+                    </optgroup>
+                    <optgroup label="Espanhol">
+                        {% for voz in vozes['es'] %}
+                            <option value="{{ voz.name }}">{{ voz.name }} ({{ voz.gender }})</option>
+                        {% endfor %}
+                    </optgroup>
+                </select>
+                <br><br>
+                <button type="submit" style="padding: 15px; font-size: 16px;">
+                    🎙️ Gerar Áudio da Narração
+                </button>
+            </form>
+        </div>
+    {% endif %}
+{% endblock %}
