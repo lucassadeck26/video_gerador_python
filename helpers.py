@@ -206,6 +206,7 @@ def listar_vozes():
     try:
         client = texttospeech.TextToSpeechClient()
         response = client.list_voices()
+        print("o valor da response dá: ", response)
         
         vozes_disponiveis = {
             'pt-BR': [],
