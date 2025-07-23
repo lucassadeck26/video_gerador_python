@@ -3,7 +3,7 @@ venv/
 *.json
 
 .env
-
+narracao_partes/
 imagens/
 videos/
 transcricao/
@@ -15,7 +15,7 @@ trilha_sonora/
 video_final/
 jobs/
 tema/
-
+roteiro_partes/
 
 __pycache__/
 *.pyc
