@@ -1,0 +1,61 @@
+{% extends "layout.html" %}
+{% block content %}
+    <h1>Painel de Monitorização de Tarefas</h1>
+    <p>A acompanhar o progresso das tarefas em segundo plano.</p>
+
+    <!-- O JavaScript irá preencher esta secção com as tarefas ativas -->
+    <div id="tasks-container"></div>
+
+<script>
+    const tasksContainer = document.getElementById('tasks-container');
+    
+    // Pega nos IDs das tarefas que guardámos na sessão
+    const activeTasks = {
+        'Geração de Vídeos Base (Etapa 4)': '{{ session.get("task_id_etapa4") }}',
+        'Montagem Final (Etapa 5)': '{{ session.get("task_id_etapa5") }}',
+        // Adicione aqui os outros IDs de tarefa
+    };
+
+    function updateTaskStatus(taskName, taskId) {
+        if (!taskId) return;
+
+        let taskDiv = document.getElementById(taskId);
+        if (!taskDiv) {
+            taskDiv = document.createElement('div');
+            taskDiv.id = taskId;
+            taskDiv.className = 'status processando';
+            taskDiv.innerHTML = `<h3>${taskName}</h3><p id="status-${taskId}">A iniciar...</p><progress id="progress-${taskId}" value="0" max="100"></progress>`;
+            tasksContainer.appendChild(taskDiv);
+        }
+
+        fetch(`/task_status/${taskId}`)
+            .then(response => response.json())
+            .then(data => {
+                const statusP = document.getElementById(`status-${taskId}`);
+                const progressBar = document.getElementById(`progress-${taskId}`);
+
+                if (data.state === 'SUCCESS' || data.state === 'FAILURE') {
+                    statusP.innerText = `Estado: ${data.state} - ${data.info.status || data.status}`;
+                    progressBar.value = 100;
+                    // Para de verificar esta tarefa
+                    clearInterval(window[`interval_${taskId}`]);
+                } else if (data.state === 'PROGRESS') {
+                    statusP.innerText = data.info.status;
+                    if (data.info.total > 0) {
+                        progressBar.value = (data.info.current / data.info.total) * 100;
+                    }
+                } else {
+                    statusP.innerText = `Estado: ${data.state}`;
+                }
+            });
+    }
+
+    // Inicia a verificação para cada tarefa ativa
+    for (const [taskName, taskId] of Object.entries(activeTasks)) {
+        if (taskId) {
+            updateTaskStatus(taskName, taskId); // Chama uma vez imediatamente
+            window[`interval_${taskId}`] = setInterval(() => updateTaskStatus(taskName, taskId), 3000); // E depois a cada 3 segundos
+        }
+    }
+</script>
+{% endblock %}

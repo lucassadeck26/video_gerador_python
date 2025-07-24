@@ -1,0 +1,163 @@
+GUIA COMPLETO: PUBLICAR A APLICAÇÃO DE VÍDEO NUMA VM DO GOOGLE CLOUD
+===================================================================
+
+Este guia contém todos os passos necessários para configurar uma Máquina Virtual (VM) no Google Cloud e implementar a sua aplicação Flask.
+
+---
+### ETAPA 1: CRIAR UMA VM MAIS POTENTE
+---
+
+1.  **Aceda ao Compute Engine:**
+    * Vá para o [Console do Google Cloud](https://console.cloud.google.com/).
+    * Na barra de pesquisa, procure por "Compute Engine".
+
+2.  **Crie uma Nova Instância:**
+    * Clique em "CRIAR INSTÂNCIA".
+    * **Nome:** Dê um nome (ex: `servidor-video-potente`).
+    * **Região:** Escolha uma perto de si (ex: `southamerica-east1`).
+    * **Tipo de Máquina:**
+        * Série: **E2**
+        * Tipo: **e2-standard-2** (2 vCPUs, 8 GB de memória). Esta é uma configuração muito mais robusta.
+    * **Disco de Arranque:**
+        * Clique em "Alterar".
+        * Sistema Operativo: **Ubuntu**
+        * Versão: **Ubuntu 22.04 LTS**
+        * Tamanho: **30 GB**
+    * **Firewall:** Marque as caixas "Permitir tráfego HTTP" e "Permitir tráfego HTTPS".
+    * Clique em "CRIAR". Anote o **IP externo** da nova VM.
+
+---
+### ETAPA 2: PREPARAR O SERVIDOR (VIA SSH)
+---
+
+1.  **Conecte-se via SSH:** Na lista de instâncias, clique no botão "SSH" ao lado da sua nova VM.
+
+2.  **Instale o Software Essencial:**
+    ```bash
+    sudo apt-get update
+    sudo apt-get install python3-pip python3-venv git nginx -y
+    ```
+
+---
+### ETAPA 3: CONFIGURAR O PROJETO
+---
+
+1.  **Transfira o seu Projeto:**
+    * No seu PC, crie um ficheiro `.zip` da sua pasta de projeto (sem a pasta `venv`).
+    * Na janela SSH, use o ícone de engrenagem (⚙️) -> "Upload file" para enviar o seu ficheiro `.zip`.
+
+2.  **Descompacte o Projeto:**
+    ```bash
+    unzip seu-projeto.zip
+    cd nome-da-pasta-do-projeto
+    ```
+
+3.  **Crie o Ambiente Virtual e Instale as Dependências:**
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate
+    pip install -r requirements.txt
+    pip install gunicorn
+    ```
+
+4.  **Configure as Credenciais:**
+    * Crie o ficheiro `.env` com as suas chaves `SECRET_KEY` e `GOOGLE_API_KEY`: `nano .env`
+    * Crie o seu ficheiro de chave `.json` do Google Cloud: `nano sua-chave.json` (cole o conteúdo).
+    * Torne a credencial do Google Cloud permanente (substitua os placeholders):
+        ```bash
+        echo 'export GOOGLE_APPLICATION_CREDENTIALS="/home/seu_username/nome-da-pasta/sua-chave.json"' >> ~/.profile
+        source ~/.profile
+        ```
+
+---
+### ETAPA 4: CONFIGURAR O GUNICORN (Serviço da Aplicação)
+---
+
+1.  **Crie o Ficheiro de Serviço:**
+    ```bash
+    sudo nano /etc/systemd/system/gerador.service
+    ```
+
+2.  **Cole a Configuração:** (Ajuste os caminhos e o nome de utilizador)
+    ```ini
+    [Unit]
+    Description=Gunicorn instance to serve a Flask app
+    After=network.target
+
+    [Service]
+    User=seu_username
+    Group=www-data
+    WorkingDirectory=/home/seu_username/nome-da-pasta-do-projeto
+    Environment="PATH=/home/seu_username/nome-da-pasta-do-projeto/venv/bin"
+    ExecStart=/home/seu_username/nome-da-pasta-do-projeto/venv/bin/gunicorn --workers 1 --threads 4 --timeout 600 --bind unix:meuapp.sock -m 007 app:app
+
+
+
+# --- ADICIONE AS SUAS CHAVES AQUI ---
+Environment="SECRET_KEY=f9bf78b9a18ce6d46a0cd2b0b86df9da"
+Environment="GOOGLE_API_KEY=AIzaSyByYMF7OyDqkb3JXKg_xt7K8zbO0dAGjHM"
+Environment="GOOGLE_APPLICATION_CREDENTIALS=/home/lucas/Área de trabalho/estudo_videos_python-master/gerador.json"
+
+    [Install]
+    WantedBy=multi-user.target
+    ```
+    * **--workers 1 --threads 4:** Configuração otimizada para tarefas pesadas.
+    * **--timeout 600:** Aumenta a paciência do servidor para 10 minutos.
+
+3.  **Inicie o Serviço:**
+    ```bash
+    sudo systemctl start gerador.service
+    sudo systemctl enable gerador.service
+    ```
+
+---
+### ETAPA 5: CONFIGURAR O NGINX (Servidor Web)
+---
+
+1.  **Crie o Ficheiro de Configuração do Nginx:**
+    ```bash
+    sudo nano /etc/nginx/sites-available/gerador
+    ```
+
+2.  **Cole a Configuração:** (Ajuste o caminho do `proxy_pass`)
+    ```nginx
+    server {
+        listen 80;
+        server_name SEU_IP_EXTERNO_AQUI;
+        client_max_body_size 100M; # Permite uploads grandes
+
+        location / {
+            include proxy_params;
+            proxy_pass http://unix:/home/seu_username/nome-da-pasta-do-projeto/meuapp.sock;
+        }
+    }
+    ```
+
+3.  **Ative a Configuração e Remova a Padrão:**
+    ```bash
+    sudo ln -s /etc/nginx/sites-available/gerador /etc/nginx/sites-enabled
+    sudo rm /etc/nginx/sites-enabled/default
+    ```
+
+4.  **Teste e Reinicie o Nginx:**
+    ```bash
+    sudo nginx -t
+    sudo systemctl restart nginx
+    ```
+
+---
+### ETAPA 6: AJUSTAR PERMISSÕES (Passo Final)
+---
+
+1.  **Dê Permissão de "Travessia" à sua Pasta Pessoal:**
+    ```bash
+    chmod 711 /home/seu_username
+    ```
+
+2.  **Reinicie os Serviços uma Última Vez:**
+    ```bash
+    sudo systemctl restart gerador.service
+    sudo systemctl restart nginx
+    ```
+
+É tudo! A sua aplicação deve agora estar a funcionar e acessível em `http://SEU_IP_EXTERNO`.

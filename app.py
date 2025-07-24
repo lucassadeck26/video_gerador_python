@@ -1,8 +1,10 @@
 # app.py
-from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory
+from flask import Flask, jsonify, render_template, request, redirect, session, url_for, flash, send_from_directory
 import helpers
 import os
 from dotenv import load_dotenv
+from celery_config import celery
+from tasks import adicionar_trilha_sonora_task, gerar_videos_base_task, montar_video_final_task
 
 # Carrega as variáveis de ambiente do arquivo .env (como a SECRET_KEY)
 load_dotenv()
@@ -10,6 +12,16 @@ load_dotenv()
 app = Flask(__name__)
 # Carrega a chave secreta do ambiente, que foi carregada do .env
 app.secret_key = os.getenv('SECRET_KEY') 
+
+
+load_dotenv()
+app = Flask(__name__)
+app.secret_key = os.getenv('SECRET_KEY_TAREFA')
+
+# VERIFICAÇÃO DE SEGURANÇA: Garante que a chave secreta foi definida.
+if not app.secret_key:
+    raise ValueError("Nenhuma SECRET_KEY definida! Por favor, crie um ficheiro .env com uma SECRET_KEY.")
+
 
 @app.route('/')
 def index():
@@ -124,47 +136,67 @@ def etapa3_1_juntar_audios():
 
 
 # --- ETAPA 4 ---
+
 @app.route('/etapa4', methods=['GET', 'POST'])
 def etapa4_videos_base():
     status = helpers.verificar_status()
-    if not status['narracao']:
-        flash("Você precisa concluir a Etapa 3 (Narração) primeiro!")
-        return redirect(url_for('etapa3_narracao'))
-        
     if request.method == 'POST':
         action = request.form.get('action')
-        if action == 'upload':
-            arquivos = request.files.getlist('novas_imagens')
-            nomes_salvos = helpers.salvar_imagens_upload(arquivos)
-            flash(f"{len(nomes_salvos)} imagens foram salvas com sucesso.")
-        elif action == 'renomear':
-            sucesso, mensagem = helpers.renomear_imagens_em_ordem()
-            flash(mensagem)
-        # NOVA AÇÃO ADICIONADA
-        elif action == 'redimensionar':
-            sucesso, mensagem = helpers.redimensionar_imagens()
-            flash(mensagem)
-        elif action == 'gerar_videos':
-            sucesso, mensagem = helpers.gerar_videos_base()
-            flash(mensagem)
+        if action == 'gerar_videos':
+            # Inicia a tarefa e guarda o seu ID na sessão do utilizador
+            task = gerar_videos_base_task.delay()
+            session['current_task_id'] = task.id
+            session['current_task_name'] = 'Geração de Vídeos Base (Etapa 4)'
+            flash("Pedido de geração de vídeos base enviado!")
+            return redirect(url_for('monitor')) # Redireciona para o painel de monitorização
+        # ... (outras ações da etapa 4) ...
         return redirect(url_for('etapa4_videos_base'))
-        
     return render_template('etapa4_videos_base.html', status=status)
 
-
-
-# ROTA DA ETAPA 5 QUE ESTAVA FALTANDO
 @app.route('/etapa5', methods=['GET', 'POST'])
 def etapa5_montagem_final():
     status = helpers.verificar_status()
-    if not status['videos_base']:
-        flash("Você precisa concluir a Etapa 4 (Geração de Vídeos Base) primeiro!")
-        return redirect(url_for('etapa4_videos_base'))
     if request.method == 'POST':
-        sucesso, mensagem = helpers.montar_video_final()
-        flash(mensagem)
+        action = request.form.get('action')
+        if action == 'montar_video':
+            task = montar_video_final_task.delay()
+            session['current_task_id'] = task.id
+            session['current_task_name'] = 'Montagem Final (Etapa 5)'
+            flash("Pedido de montagem final enviado!")
+            return redirect(url_for('monitor'))
         return redirect(url_for('etapa5_montagem_final'))
     return render_template('etapa5_montagem_final.html', status=status)
+
+# --- Rotas de Monitorização ---
+
+@app.route('/monitor')
+def monitor():
+    """Página que mostra a tarefa ativa."""
+    task_id = session.get('current_task_id')
+    task_name = session.get('current_task_name', 'Tarefa')
+    return render_template('monitor.html', task_id=task_id, task_name=task_name)
+
+@app.route('/task_status/<task_id>')
+def task_status(task_id):
+    """Endpoint para o JavaScript obter o estado de uma tarefa específica."""
+    task = celery.AsyncResult(task_id)
+    
+    if task.state == 'PENDING':
+        response = {'state': task.state, 'status': 'Pendente...'}
+    elif task.state != 'FAILURE':
+        response = {
+            'state': task.state,
+            'info': task.info or {'status': 'A iniciar...'}, # Garante que 'info' nunca é nulo
+        }
+    else: # A tarefa falhou
+        response = {
+            'state': task.state,
+            'info': {'status': str(task.info)}, # Converte a exceção em texto
+        }
+    return jsonify(response)
+
+
+
 
 
 # ---ROTA ETAPA 6 ---
@@ -186,12 +218,19 @@ def etapa6_pos_video():
 
         elif action == 'mixar_video':
             trilhas_selecionadas = request.form.getlist('trilhas_selecionadas')
-            sucesso, mensagem = helpers.adicionar_trilha_sonora(trilhas_selecionadas)
-            flash(mensagem)
+            adicionar_trilha_sonora_task.delay(trilhas_selecionadas)
+
+        
+            flash("Pedido de montagem com trilha sonora enviado! A página irá atualizar.")
 
         return redirect(url_for('etapa6_pos_video'))
 
     return render_template('etapa6_pos_video.html', status=status)
+
+
+
+
+
 
 
 # Rota para servir as imagens da pasta 'imagens'

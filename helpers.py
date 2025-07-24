@@ -460,8 +460,46 @@ def criar_clipe_zoom_para_imagem(caminho_imagem, tipo_zoom, duracao=10):
 # ==================================================================
 # FUNÇÃO DE GERAÇÃO DE VÍDEOS ATUALIZADA
 # ==================================================================
+
+def gerar_videos_base(task):
+    """Gera os vídeos base e reporta o progresso para o Celery."""
+    try:
+        status = verificar_status()
+        imagens = status['imagens']
+        if not imagens:
+            return {'status': 'Nenhuma imagem encontrada.'}
+
+        os.makedirs(PASTA_VIDEOS_BASE, exist_ok=True)
+        tipos_de_zoom = ['direita', 'esquerda', 'centro']
+        total_videos = len(imagens)
+        
+        for i, nome_imagem in enumerate(imagens):
+            # --- Relatório de Progresso ---
+            mensagem = f"A gerar vídeo {i + 1} de {total_videos} ({nome_imagem})..."
+            task.update_state(state='PROGRESS', meta={'current': i, 'total': total_videos, 'status': mensagem})
+            print(f"WORKER: {mensagem}")
+            
+            caminho_imagem = os.path.join(PASTA_IMAGENS, nome_imagem)
+            nome_base, _ = os.path.splitext(nome_imagem)
+            nome_video = f"{nome_base}.mp4"
+            caminho_video = os.path.join(PASTA_VIDEOS_BASE, nome_video)
+
+            if not os.path.exists(caminho_video):
+                tipo_zoom_atual = tipos_de_zoom[i % len(tipos_de_zoom)]
+                clipe = criar_clipe_zoom_para_imagem(caminho_imagem, tipo_zoom=tipo_zoom_atual)
+                if clipe:
+                    clipe.write_videofile(caminho_video, fps=30, logger=None) # logger=None para um output mais limpo
+
+        return {'current': total_videos, 'total': total_videos, 'status': 'Geração de vídeos base concluída!'}
+    except Exception as e:
+        task.update_state(state='FAILURE', meta={'exc_type': type(e).__name__, 'exc_message': str(e)})
+        raise e
+
+
+
+"""   
 def gerar_videos_base():
-    """Gera os vídeos de 10 segundos para cada imagem, alternando os efeitos de zoom."""
+    Gera os vídeos de 10 segundos para cada imagem, alternando os efeitos de zoom
     status = verificar_status()
     imagens = status['imagens']
     if not imagens:
@@ -497,7 +535,7 @@ def gerar_videos_base():
             videos_criados += 1
 
     return True, f"{videos_criados} novos vídeos base foram gerados com sucesso."
-
+"""   
 
 # VERSÃO CORRIGIDA DA FUNÇÃO DE EXCLUSÃO
 # ... (outras funções como gerar_transcricao, etc. permanecem as mesmas) ...
@@ -532,10 +570,38 @@ def excluir_arquivo(etapa, arquivos_especificos=None):
 # ==================================================================
 # ETAPA 5
 # ==================================================================
+def montar_video_final(task):
+    """Monta o vídeo final e reporta o progresso."""
+    try:
+        status = verificar_status()
+        audio_clip = mp.AudioFileClip(os.path.join(PASTA_NARRACAO, status['narracao']))
+        duracao_total = audio_clip.duration
+        
+        task.update_state(state='PROGRESS', meta={'status': 'A carregar clips de vídeo base...'})
+        clips_video = [mp.VideoFileClip(os.path.join(PASTA_VIDEOS_BASE, v)) for v in status['videos_base']]
+        
+        task.update_state(state='PROGRESS', meta={'status': 'A concatenar e a fazer o loop do vídeo...'})
+        video_loop = mp.vfx.loop(mp.concatenate_videoclips(clips_video, method="compose"), duration=duracao_total)
+        video_com_audio = video_loop.set_audio(audio_clip)
+        
+        os.makedirs(PASTA_VIDEO_SEM_TRILHA, exist_ok=True)
+        excluir_arquivo('video_sem_trilha')
+        caminho_saida = os.path.join(PASTA_VIDEO_SEM_TRILHA, "video_sem_trilha.mp4")
+        
+        # O logger do MoviePy será usado para reportar o progresso da renderização
+        video_com_audio.write_videofile(caminho_saida, fps=30, codec="libx264")
+
+        return {'status': 'Montagem do vídeo (sem trilha) concluída!'}
+    except Exception as e:
+        task.update_state(state='FAILURE', meta={'exc_type': type(e).__name__, 'exc_message': str(e)})
+        raise e
+
+
+"""   
 def montar_video_final():
-    """
+    
     Monta o vídeo (SEM TRILHA) juntando os vídeos base com a narração.
-    """
+   
     status = verificar_status()
     videos_base = status['videos_base']
     arquivo_narracao = status['narracao']
@@ -569,7 +635,7 @@ def montar_video_final():
     except Exception as e:
         print(f"Ocorreu um erro durante a montagem: {e}")
         return False, f"Ocorreu um erro durante a montagem: {e}"
-
+"""
 
 # ==================================================================
 # ETAPA 6
@@ -584,6 +650,8 @@ def salvar_trilhas_upload(arquivos):
             caminho_salvar = os.path.join(PASTA_TRILHA_SONORA, nome_seguro)
             arquivo.save(caminho_salvar)
     return True
+
+
 
 # VERSÃO ATUALIZADA DA FUNÇÃO DE ADICIONAR TRILHA
 def adicionar_trilha_sonora(nomes_trilhas, volume=0.15):

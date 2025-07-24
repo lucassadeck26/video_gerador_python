@@ -8,3 +8,5 @@ Pillow
 numpy
 werkzeug
 gunicorn
+celery
+redis
